@@ -1,129 +1,79 @@
-import React, { useState } from "react";
-import { StyleSheet, View, Button, Text } from "react-native";
-import { Audio } from "expo-av";
-import axios from "axios";
-import * as Speech from "expo-speech";
+import React, { useRef, useEffect } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
+import { useRecording } from "@/hooks/useRecordings";
+import MicButton from "@/components/MicButton";
+import WaveBars from "@/components/WaveBars";
+import ResponseCard from "@/components/ResponseCard";
+import { Colors as colors } from "@/constants/theme";
 
 export default function HomeScreen() {
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [responseText, setResponseText] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
+  const { isRecording, isLoading, responseText, start, stop } = useRecording();
+  const fadeIn = useRef(new Animated.Value(0)).current;
 
-  async function startRecording() {
-    if (recording) return;
+  useEffect(() => {
+    Animated.timing(fadeIn, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
-    const permissionResponse = await Audio.requestPermissionsAsync();
-
-    if (!permissionResponse.granted) {
-      alert("Microphone permission required");
-      return;
-    }
-
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
-
-    const { recording: newRecording } = await Audio.Recording.createAsync(
-      Audio.RecordingOptionsPresets.HIGH_QUALITY,
-    );
-
-    setRecording(newRecording);
-    setIsRecording(true);
-
-    console.log("Recording started");
-  }
-
-  async function stopRecording() {
-    if (!recording) return;
-
-    await recording.stopAndUnloadAsync();
-
-    const uri = recording.getURI();
-
-    console.log("Audio saved at:", uri);
-
-    setRecording(null);
-    setIsRecording(false);
-
-    if (uri) {
-      sendAudio(uri);
-    }
-  }
-
-  async function sendAudio(uri: string) {
-    const formData = new FormData();
-
-    formData.append("audio", {
-      uri: uri,
-      name: "voice.m4a",
-      type: "audio/m4a",
-    } as any);
-
-    try {
-      const res = await axios.post(
-        "https://scruffily-nonmethodic-galileo.ngrok-free.dev/chat",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
-      );
-
-      const reply = res.data.text;
-
-      setResponseText(reply);
-
-      Speech.speak(reply);
-    } catch (error) {
-      console.log("Error sending audio:", error);
-    }
-  }
+  const statusText = isLoading
+    ? "Processing..."
+    : isRecording
+      ? "Listening..."
+      : "Tap to speak";
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Talk To Yourself AI</Text>
+    <Animated.View style={[styles.container, { opacity: fadeIn }]}>
+      <Text style={styles.title}>MirrorMind</Text>
+      <Text style={styles.subtitle}>Your AI voice companion</Text>
 
-      <Text style={styles.status}>
-        {isRecording ? "Recording..." : "Tap to speak"}
+      <MicButton
+        isRecording={isRecording}
+        isLoading={isLoading}
+        onPress={isRecording ? stop : start}
+      />
+
+      <WaveBars isRecording={isRecording} />
+
+      <Text style={[styles.status, isRecording && styles.statusActive]}>
+        {statusText}
       </Text>
 
-      <View style={{ height: 20 }} />
-
-      <Button title="Start Recording" onPress={startRecording} />
-
-      <View style={{ height: 20 }} />
-
-      <Button title="Stop Recording" onPress={stopRecording} />
-
-      <Text style={styles.response}>AI Response: {responseText}</Text>
-    </View>
+      <ResponseCard text={responseText} />
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    justifyContent: "center",
+    backgroundColor: colors.background,
+    padding: 24,
   },
-
   title: {
-    fontSize: 24,
-    marginBottom: 40,
-    fontWeight: "bold",
+    fontSize: 32,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    letterSpacing: 1,
+    marginBottom: 6,
   },
-
+  subtitle: {
+    fontSize: 14,
+    color: colors.textDim,
+    letterSpacing: 0.5,
+    marginBottom: 64,
+  },
   status: {
-    fontSize: 16,
-    marginBottom: 10,
+    fontSize: 15,
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+    marginBottom: 40,
   },
-
-  response: {
-    marginTop: 40,
-    fontSize: 16,
-    textAlign: "center",
+  statusActive: {
+    color: colors.primary,
   },
 });
